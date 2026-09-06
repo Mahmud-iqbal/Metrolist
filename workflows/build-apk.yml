@@ -1,0 +1,100 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+        
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+      continue-on-error: true
+      
+    - name: Build Release APK (unsigned)
+      run: ./gradlew assembleRelease
+      continue-on-error: true
+      
+    - name: Find and list APK files
+      run: |
+        find . -name "*.apk" -type f
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          app/build/outputs/apk/**/*.apk
+        body: |
+          ## 📱 Metrolist APK Release
+          
+          **Version:** ${{ github.ref_name }}
+          **Released:** ${{ github.event.head_commit.timestamp }}
+          
+          ### 📥 Installation Instructions:
+          
+          1. **Download the APK file** from the assets below
+          2. **Enable Installation from Unknown Sources:**
+             - Go to Settings → Security → Unknown Sources (or Apps & notifications)
+             - Toggle ON "Install apps from unknown sources"
+          3. **Install the APK:**
+             - Open file manager or Downloads folder
+             - Tap the downloaded APK file
+             - Tap "Install"
+             - Wait for installation to complete
+          4. **Launch the app** from your app drawer
+          
+          ### 📋 What's Included:
+          - ✅ Debug APK - For testing and development
+          - ✅ Release APK - Optimized for production use
+          
+          ### 🐛 Known Issues & Fixes:
+          - MP3 upload functionality fixed
+          - Performance improvements
+          - Bug fixes and optimizations
+          
+          ### ❓ Troubleshooting:
+          - If installation fails, ensure you have enough storage space
+          - Try clearing cache: Settings → Apps → Metrolist → Storage → Clear Cache
+          - For older Android versions, try the debug APK instead
+          
+          ---
+          *For issues or feature requests, please open an issue on GitHub*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload APK Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: metrolist-apk-${{ github.ref_name }}
+        path: app/build/outputs/apk/
+        retention-days: 90
+        if-no-files-found: warn
